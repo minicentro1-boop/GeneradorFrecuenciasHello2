@@ -24,6 +24,8 @@
       align-items: center;
       min-height: 100vh;
       margin: 0;
+      padding: 1.5rem 0;
+      box-sizing: border-box;
     }
 
     .container {
@@ -32,7 +34,7 @@
       border-radius: 1rem;
       box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
       width: 100%;
-      max-width: 400px;
+      max-width: 420px;
       text-align: center;
     }
 
@@ -60,7 +62,7 @@
       align-items: center;
     }
 
-    input[type="number"] {
+    input[type="number"], input[type="text"] {
       background: var(--bg-color);
       border: 1px solid #334155;
       color: var(--text);
@@ -69,6 +71,9 @@
       font-size: 1.1rem;
       width: 100%;
       box-sizing: border-box;
+    }
+
+    input[type="number"] {
       text-align: center;
     }
 
@@ -108,6 +113,21 @@
       color: white;
     }
 
+    .btn-secondary {
+      background-color: #334155;
+      color: var(--text);
+      padding: 0.6rem 0.8rem;
+      border-radius: 0.5rem;
+      border: 1px solid #475569;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background-color 0.2s;
+    }
+
+    .btn-secondary:hover {
+      background-color: #475569;
+    }
+
     .wave-selector {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
@@ -136,6 +156,81 @@
       color: var(--accent);
       text-align: center;
       margin-top: 0.5rem;
+    }
+
+    /* Preset section styles */
+    .presets-container {
+      margin-top: 1.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid #334155;
+      text-align: left;
+    }
+
+    .preset-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      max-height: 180px;
+      overflow-y: auto;
+      margin-top: 0.8rem;
+    }
+
+    .preset-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--bg-color);
+      border: 1px solid #334155;
+      padding: 0.6rem 0.8rem;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .preset-item:hover {
+      border-color: var(--accent);
+    }
+
+    .preset-info {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .preset-title {
+      font-weight: bold;
+      font-size: 0.95rem;
+      color: var(--text);
+    }
+
+    .preset-details {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .preset-actions {
+      display: flex;
+      gap: 0.4rem;
+    }
+
+    .btn-delete-preset {
+      background: transparent;
+      border: none;
+      color: var(--danger);
+      cursor: pointer;
+      font-size: 1.1rem;
+      padding: 0.2rem 0.4rem;
+      border-radius: 0.3rem;
+      line-height: 1;
+    }
+
+    .btn-delete-preset:hover {
+      background: #ef444422;
+    }
+
+    .add-preset-box {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.8rem;
     }
   </style>
 </head>
@@ -184,6 +279,19 @@
 
     <!-- Botón Encendido/Apagado -->
     <button id="toggleBtn" class="btn btn-start">Iniciar Tono</button>
+
+    <div class="presets-container">
+      <label>Frecuencias Predeterminadas</label>
+      
+      <div class="add-preset-box">
+        <input type="text" id="presetNameInput" placeholder="Nombre (ej. Meditación)">
+        <button id="savePresetBtn" class="btn-secondary" style="white-space: nowrap;">+ Guardar</button>
+      </div>
+
+      <div id="presetList" class="preset-list">
+        <!-- Los presets se cargarán dinámicamente aquí -->
+      </div>
+    </div>
   </div>
 
   <script>
@@ -203,6 +311,20 @@
     const timerMin = document.getElementById('timerMin');
     const timerSec = document.getElementById('timerSec');
     const timerDisplay = document.getElementById('timerDisplay');
+
+    // Elementos de Presets
+    const presetNameInput = document.getElementById('presetNameInput');
+    const savePresetBtn = document.getElementById('savePresetBtn');
+    const presetList = document.getElementById('presetList');
+
+    // Presets por defecto si no existen en localStorage
+    const defaultPresets = [
+      { id: 'def-1', name: 'Nota La (A4)', freq: 440, wave: 'sine', min: 0, sec: 30 },
+      { id: 'def-2', name: 'Solfeggio (528 Hz)', freq: 528, wave: 'sine', min: 5, sec: 0 },
+      { id: 'def-3', name: 'Bajos Profundos', freq: 60, wave: 'sine', min: 1, sec: 0 }
+    ];
+
+    let userPresets = JSON.parse(localStorage.getItem('freq_presets')) || defaultPresets;
 
     function initAudio() {
       if (!audioCtx) {
@@ -313,12 +435,96 @@
     function setWave(type, btn) {
       waveType = type;
       document.querySelectorAll('.wave-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
+      
+      if (btn) {
+        btn.classList.add('active');
+      } else {
+        const targetBtn = Array.from(document.querySelectorAll('.wave-btn')).find(b => {
+          const onclickAttr = b.getAttribute('onclick');
+          return onclickAttr && onclickAttr.includes(`'${type}'`);
+        });
+        if (targetBtn) targetBtn.classList.add('active');
+      }
 
       if (oscillator && isPlaying) {
         oscillator.type = waveType;
       }
     }
+
+    function renderPresets() {
+      presetList.innerHTML = '';
+      userPresets.forEach(preset => {
+        const item = document.createElement('div');
+        item.className = 'preset-item';
+        
+        const waveNames = { sine: 'Senoidal', square: 'Cuadrada', sawtooth: 'Sierra', triangle: 'Triangular' };
+        const timeStr = `${String(preset.min).padStart(2, '0')}:${String(preset.sec).padStart(2, '0')}`;
+
+        item.innerHTML = `
+          <div class="preset-info">
+            <span class="preset-title">${preset.name}</span>
+            <span class="preset-details">${preset.freq} Hz • ${waveNames[preset.wave] || preset.wave} • ${timeStr}</span>
+          </div>
+          <div class="preset-actions">
+            <button class="btn-delete-preset" title="Eliminar">&times;</button>
+          </div>
+        `;
+
+        // Al hacer clic en el preset, cargar sus valores
+        item.addEventListener('click', (e) => {
+          if (e.target.classList.contains('btn-delete-preset')) return;
+          applyPreset(preset);
+        });
+
+        // Evento eliminar
+        const deleteBtn = item.querySelector('.btn-delete-preset');
+        deleteBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          deletePreset(preset.id);
+        });
+
+        presetList.appendChild(item);
+      });
+    }
+
+    function applyPreset(preset) {
+      if (isPlaying) {
+        stopAudio();
+      }
+
+      updateFrequency(preset.freq);
+      setWave(preset.wave, null);
+      timerMin.value = preset.min;
+      timerSec.value = preset.sec;
+    }
+
+    function savePreset() {
+      const name = presetNameInput.value.trim() || `Frecuencia ${freqInput.value}Hz`;
+      const newPreset = {
+        id: Date.now().toString(),
+        name: name,
+        freq: parseFloat(freqInput.value),
+        wave: waveType,
+        min: parseInt(timerMin.value) || 0,
+        sec: parseInt(timerSec.value) || 0
+      };
+
+      userPresets.push(newPreset);
+      localStorage.setItem('freq_presets', JSON.stringify(userPresets));
+      presetNameInput.value = '';
+      renderPresets();
+    }
+
+    function deletePreset(id) {
+      userPresets = userPresets.filter(p => p.id !== id);
+      localStorage.setItem('freq_presets', JSON.stringify(userPresets));
+      renderPresets();
+    }
+
+    savePresetBtn.addEventListener('click', savePreset);
+
+    // Renderizar presets iniciales al cargar la página
+    renderPresets();
   </script>
 </body>
 </html>
