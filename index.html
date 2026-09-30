@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generador de Frecuencias</title>
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: #1e293b;
+      --accent: #38bdf8;
+      --accent-hover: #0284c7;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --danger: #ef4444;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+    }
+
+    .container {
+      background-color: var(--card-bg);
+      padding: 2rem;
+      border-radius: 1rem;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+    }
+
+    h1 {
+      margin-top: 0;
+      font-size: 1.5rem;
+      color: var(--accent);
+    }
+
+    .control-group {
+      margin-bottom: 1.5rem;
+      text-align: left;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .input-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    input[type="number"] {
+      background: var(--bg-color);
+      border: 1px solid #334155;
+      color: var(--text);
+      padding: 0.6rem;
+      border-radius: 0.5rem;
+      font-size: 1.1rem;
+      width: 100%;
+      box-sizing: border-box;
+      text-align: center;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .unit {
+      font-weight: bold;
+      color: var(--accent);
+    }
+
+    .btn {
+      width: 100%;
+      padding: 0.8rem;
+      border: none;
+      border-radius: 0.5rem;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .btn-start {
+      background-color: var(--accent);
+      color: #0f172a;
+    }
+
+    .btn-start:hover {
+      background-color: var(--accent-hover);
+    }
+
+    .btn-stop {
+      background-color: var(--danger);
+      color: white;
+    }
+
+    .wave-selector {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .wave-btn {
+      background: var(--bg-color);
+      border: 1px solid #334155;
+      color: var(--text-muted);
+      padding: 0.5rem;
+      border-radius: 0.4rem;
+      cursor: pointer;
+    }
+
+    .wave-btn.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #0369a122;
+    }
+
+    .timer-display {
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: var(--accent);
+      text-align: center;
+      margin-top: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>Generador de Tonos</h1>
+
+    <!-- Selección de onda -->
+    <div class="control-group">
+      <label>Tipo de Onda</label>
+      <div class="wave-selector">
+        <button class="wave-btn active" onclick="setWave('sine', this)">Senoidal</button>
+        <button class="wave-btn" onclick="setWave('square', this)">Cuadrada</button>
+        <button class="wave-btn" onclick="setWave('sawtooth', this)">Sierra</button>
+        <button class="wave-btn" onclick="setWave('triangle', this)">Triangular</button>
+      </div>
+    </div>
+
+    <!-- Frecuencia -->
+    <div class="control-group">
+      <label for="freqInput">Frecuencia (Hz)</label>
+      <div class="input-row">
+        <input type="number" id="freqInput" value="440" min="20" max="20000" step="1" style="text-align: left;">
+        <span class="unit">Hz</span>
+      </div>
+      <input type="range" id="freqSlider" value="440" min="20" max="20000" step="1" style="margin-top: 0.8rem;">
+    </div>
+
+    <!-- Volumen -->
+    <div class="control-group">
+      <label for="volumeSlider">Volumen (<span id="volLabel">50</span>%)</label>
+      <input type="range" id="volumeSlider" value="50" min="0" max="100">
+    </div>
+
+    <!-- Temporizador -->
+    <div class="control-group">
+      <label>Temporizador (Minutos : Segundos)</label>
+      <div class="input-row">
+        <input type="number" id="timerMin" value="0" min="0" max="59" placeholder="Min">
+        <span>:</span>
+        <input type="number" id="timerSec" value="0" min="0" max="59" placeholder="Seg">
+      </div>
+      <div id="timerDisplay" class="timer-display" style="display: none;">00:00</div>
+    </div>
+
+    <!-- Botón Encendido/Apagado -->
+    <button id="toggleBtn" class="btn btn-start">Iniciar Tono</button>
+  </div>
+
+  <script>
+    let audioCtx = null;
+    let oscillator = null;
+    let gainNode = null;
+    let isPlaying = false;
+    let waveType = 'sine';
+    let timerInterval = null;
+    let totalSecondsRemaining = 0;
+
+    const freqInput = document.getElementById('freqInput');
+    const freqSlider = document.getElementById('freqSlider');
+    const volumeSlider = document.getElementById('volumeSlider');
+    const volLabel = document.getElementById('volLabel');
+    const toggleBtn = document.getElementById('toggleBtn');
+    const timerMin = document.getElementById('timerMin');
+    const timerSec = document.getElementById('timerSec');
+    const timerDisplay = document.getElementById('timerDisplay');
+
+    function initAudio() {
+      if (!audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContext();
+      }
+    }
+
+    function startAudio() {
+      initAudio();
+
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+
+      oscillator = audioCtx.createOscillator();
+      gainNode = audioCtx.createGain();
+
+      oscillator.type = waveType;
+      oscillator.frequency.value = parseFloat(freqInput.value);
+
+      // Calcular volumen (0.0 a 1.0)
+      const volume = parseFloat(volumeSlider.value) / 100;
+      gainNode.gain.setValueAtTime(volume, audioCtx.currentTime);
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      oscillator.start();
+      isPlaying = true;
+
+      toggleBtn.textContent = 'Detener Tono';
+      toggleBtn.className = 'btn btn-stop';
+
+      // Manejo del temporizador
+      const min = parseInt(timerMin.value) || 0;
+      const sec = parseInt(timerSec.value) || 0;
+      totalSecondsRemaining = (min * 60) + sec;
+
+      if (totalSecondsRemaining > 0) {
+        updateTimerDisplay();
+        timerDisplay.style.display = 'block';
+        timerInterval = setInterval(() => {
+          totalSecondsRemaining--;
+          if (totalSecondsRemaining <= 0) {
+            stopAudio();
+          } else {
+            updateTimerDisplay();
+          }
+        }, 1000);
+      }
+    }
+
+    function stopAudio() {
+      if (oscillator) {
+        oscillator.stop();
+        oscillator.disconnect();
+        oscillator = null;
+      }
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+      isPlaying = false;
+      toggleBtn.textContent = 'Iniciar Tono';
+      toggleBtn.className = 'btn btn-start';
+      timerDisplay.style.display = 'none';
+    }
+
+    function updateTimerDisplay() {
+      const m = Math.floor(totalSecondsRemaining / 60);
+      const s = totalSecondsRemaining % 60;
+      timerDisplay.textContent = `Tiempo restante: ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+
+    toggleBtn.addEventListener('click', () => {
+      if (isPlaying) {
+        stopAudio();
+      } else {
+        startAudio();
+      }
+    });
+
+    // Sincronizar campo numérico y deslizador de frecuencia
+    function updateFrequency(value) {
+      const freq = Math.max(20, Math.min(20000, value));
+      freqInput.value = freq;
+      freqSlider.value = freq;
+
+      if (oscillator && isPlaying) {
+        oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      }
+    }
+
+    freqInput.addEventListener('input', (e) => updateFrequency(e.target.value));
+    freqSlider.addEventListener('input', (e) => updateFrequency(e.target.value));
+
+    // Control de Volumen
+    volumeSlider.addEventListener('input', (e) => {
+      const vol = e.target.value;
+      volLabel.textContent = vol;
+      if (gainNode && isPlaying) {
+        gainNode.gain.setValueAtTime(vol / 100, audioCtx.currentTime);
+      }
+    });
+
+    // Cambiar tipo de onda
+    function setWave(type, btn) {
+      waveType = type;
+      document.querySelectorAll('.wave-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      if (oscillator && isPlaying) {
+        oscillator.type = waveType;
+      }
+    }
+  </script>
+</body>
+</html>
